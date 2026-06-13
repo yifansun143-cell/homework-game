@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚假信息识别大作战 - 融合新闻特别版 3.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #00d2ff; --secondary-color: #3a7bd5;
+            --true-color: #00ff87; --false-color: #ff4b4b; --warn-color: #f59e0b;
+            --bg-dark: #0f172a; --panel-bg: rgba(30, 41, 59, 0.85);
+            --text-main: #f8fafc; --text-muted: #94a3b8;
+            --combo-color: #ff00ff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center;
+            color: var(--text-main); background-color: var(--bg-dark);
+            background-image: linear-gradient(rgba(0, 210, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 210, 255, 0.05) 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            background-size: 30px 30px, 30px 30px, 100% 100%;
+            overflow-x: hidden;
+        }
+
+        .game-container {
+            background: var(--panel-bg); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5), 0 0 20px rgba(0, 210, 255, 0.2);
+            width: 90%; max-width: 650px; padding: 40px; text-align: center; position: relative;
+            overflow: hidden;
+        }
+
+        #timer-container {
+            position: absolute; top: 0; left: 0; right: 0; height: 6px; background: rgba(255,255,255,0.1); display: none;
+        }
+        #timer-bar {
+            height: 100%; width: 100%; background: linear-gradient(90deg, var(--true-color), var(--warn-color), var(--false-color));
+            transition: width 0.1s linear, background-color 0.3s;
+        }
+
+        h1 { color: var(--primary-color); margin-top: 0; font-size: 26px; }
+
+        #briefing-screen { display: block; text-align: left; min-height: 200px; }
+        #consent-screen, #game-screen, #end-screen { display: none; }
+        
+        .typewriter-text { font-family: 'Courier New', Courier, monospace; color: var(--true-color); font-size: 16px; line-height: 1.6; text-shadow: 0 0 5px var(--true-color); }
+        .cursor { display: inline-block; width: 10px; height: 18px; background-color: var(--true-color); animation: blink 1s step-end infinite; vertical-align: middle; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        .consent-text { text-align: left; font-size: 15px; line-height: 1.8; color: #cbd5e1; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid var(--warn-color); }
+
+        .score-board { font-size: 16px; color: var(--text-muted); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;}
+        .score-board span { color: var(--primary-color); font-size: 18px; font-weight: bold;}
+        
+        .combo-badge { background: rgba(255, 0, 255, 0.15); color: var(--combo-color); padding: 4px 10px; border-radius: 8px; font-weight: bold; display: none; border: 1px solid var(--combo-color);}
+        @keyframes pop { 0% { transform: scale(0.8); opacity: 0; } 50% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+
+        .question-badge { display: inline-block; background: rgba(0, 210, 255, 0.15); color: var(--primary-color); padding: 4px 12px; border-radius: 20px; font-size: 14px; margin-bottom: 15px; }
+        .question-box { background-color: rgba(0, 0, 0, 0.3); border-left: 4px solid var(--primary-color); padding: 20px 25px; margin-bottom: 30px; font-size: 18px; line-height: 1.7; text-align: left; }
+        
+        .interactive-area { margin-bottom: 25px; min-height: 120px; }
+        
+        /* 二元判断按钮样式 */
+        .binary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .binary-btn { padding: 20px; font-size: 18px; font-weight: bold; border-radius: 12px; cursor: pointer; transition: all 0.3s ease; border: 2px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: #fff;}
+        .binary-btn.true-btn:hover:not(:disabled) { border-color: var(--true-color); background: rgba(0, 255, 135, 0.1); box-shadow: 0 0 15px rgba(0, 255, 135, 0.3); transform: translateY(-3px);}
+        .binary-btn.false-btn:hover:not(:disabled) { border-color: var(--false-color); background: rgba(255, 75, 75, 0.1); box-shadow: 0 0 15px rgba(255, 75, 75, 0.3); transform: translateY(-3px);}
+        .binary-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none !important; box-shadow: none !important; filter: grayscale(100%); }
+        
+        /* 滑块样式 */
+        .slider-container { text-align: center; padding: 20px 0; }
+        .trust-slider { -webkit-appearance: none; width: 100%; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--false-color) 0%, var(--warn-color) 50%, var(--true-color) 100%); outline: none; opacity: 0.9; }
+        .trust-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 0 12px rgba(0,0,0,0.5); border: 3px solid var(--bg-dark); transition: transform 0.1s;}
+        .trust-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        .slider-value { font-size: 24px; font-weight: bold; margin-top: 15px; color: var(--primary-color); }
+        
+        .btn-action { background: linear-gradient(135deg, var(--secondary-color), var(--primary-color)); color: white; border: none; padding: 12px 35px; font-size: 16px; font-weight: bold; border-radius: 25px; cursor: pointer; margin-top: 10px; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3); }
+        .btn-action:hover:not(:disabled) { transform: scale(1.05); }
+        .btn-action:disabled { background: #475569; box-shadow: none; cursor: not-allowed; }
+        
+        /* 错误震动特效 */
+        .btn-shake { animation: shake 0.5s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+        
+        .feedback-box { display: none; padding: 25px; border-radius: 12px; margin-top: 20px; text-align: left; animation: fadeIn 0.4s ease; border: 1px solid #334155; }
+        .feedback-correct { background: rgba(0, 255, 135, 0.1); border-color: var(--true-color); }
+        .feedback-mixed { background: rgba(245, 158, 11, 0.1); border-color: var(--warn-color); }
+        .feedback-wrong { background: rgba(255, 75, 75, 0.1); border-color: var(--false-color); }
+        .feedback-title { font-size: 22px; font-weight: bold; margin-bottom: 15px; }
+        .explanation { font-size: 16px; color: #cbd5e1; line-height: 1.7; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;}
+        
+        /* 弹窗系统 */
+        .toast-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; pointer-events: none; }
+        .toast { background: rgba(15, 23, 42, 0.95); border: 2px solid var(--false-color); border-radius: 30px; padding: 12px 25px; color: #fff; font-weight: bold; margin-top: 10px; box-shadow: 0 5px 20px rgba(255, 75, 75, 0.4); animation: slideUpFade 3s forwards; display: flex; align-items: center; gap: 10px; font-size: 16px;}
+        @keyframes slideUpFade { 0% { opacity: 0; transform: translateY(20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
+
+        .chart-container { width: 100%; max-width: 400px; margin: 0 auto 20px auto; }
+        .final-score { font-size: 54px; background: -webkit-linear-gradient(0deg, var(--primary-color), var(--true-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 5px 0; font-weight: 900; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @media (max-width: 500px) { .binary-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <div id="timer-container"><div id="timer-bar"></div></div>
+
+    <div id="briefing-screen">
+        <div class="typewriter-text" id="typewriter"></div><span class="cursor" id="cursor"></span>
+        <div style="text-align: center; margin-top: 30px; display: none;" id="btn-skip-briefing">
+            <button class="btn-action" onclick="showConsent()">接入系统</button>
+        </div>
+    </div>
+
+    <div id="consent-screen">
+        <h1>📑 学术研究知情同意书</h1>
+        <div class="consent-text">
+            尊敬的调查员：<br><br>
+            欢迎参与“虚假信息识别大作战”。请注意以下规则：<br>
+            <ul>
+                <li>第1、3、5题需直接进行<strong>【二元对错判断】</strong>。</li>
+                <li>第2、4题需使用<strong>【滑块】</strong>评估信任程度。</li>
+                <li>⚠️ <strong>容错机制</strong>：每题拥有<strong>1次</strong>重新选择的机会。首次选错会导致得分折损，务必谨慎操作！</li>
+            </ul>
+            系统将收集您的决策耗时与得分，仅用于学术研究，严格保密。<br><br>
+            点击下方按钮，开始潜入。
+        </div>
+        <button class="btn-action" onclick="startGame()">我已了解，开始潜入</button>
+    </div>
+
+    <div id="game-screen">
+        <div class="score-board">
+            <div>关卡: <span id="current-progress">1</span>/5</div>
+            <div id="combo-display" class="combo-badge">🔥 <span id="combo-count">2</span>连击!</div>
+            <div>战力评分: <span id="current-score">0</span></div>
+        </div>
+        
+        <div id="question-container">
+            <div class="question-badge" id="question-type">任务加载中...</div>
+            <div class="question-box" id="question-text">系统正在接入信息源...</div>
+            <div class="interactive-area" id="interactive-area"></div>
+        </div>
+
+        <div class="feedback-box" id="feedback-area">
+            <div class="feedback-title" id="feedback-title">分析完成...</div>
+            <div class="explanation"><strong>🕵️‍♂️ 深度复盘：</strong><br><br><span id="explanation-text">解释内容...</span></div>
+            <div style="text-align: center;">
+                <button class="btn-action" id="btn-next" onclick="nextQuestion()" style="margin-top: 20px;">追踪下一线索 ➔</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="end-screen" id="end-screen">
+        <h1>🎉 调查结束！</h1>
+        <p>你的调查员最终战力评分为：</p>
+        <div class="final-score" id="final-score-display">0</div>
+        <p id="evaluation-text" style="font-size: 18px; line-height: 1.6; margin-bottom: 10px;"></p>
+        
+        <div class="chart-container">
+            <canvas id="radarChart"></canvas>
+        </div>
+
+        <p id="upload-status" style="color: var(--warn-color); font-size: 15px; font-weight: bold; margin-top: 20px;">正在加密上传学术数据，请稍候...</p>
+    </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+    /* ================= 3.0版题库（二元+滑块） ================= */
+    const questions = [
+        { 
+            qType: "binary", typeTag: "阶段一：二元真伪判定", 
+            text: "福建三明永安市一名女司机与保安视频中举止亲昵,配文两人疑似在接吻』", 
+            correctValue: false, // 假
+            explanation: "一名女司机因在禁止停车区域停车接孩子，与附近企业的一名保安发生争执，升级为肢体冲突。事件发生后，部分网友为蹭流量，利用AI工具生成两人“拥抱”“接吻”“求婚”等所谓“和好”的低俗辣眼视频，在网上大量传播，造成不良影响。",
+            dimension: "直觉洞察"
+        },
+        { 
+            qType: "slider", typeTag: "阶段二：滑块信任度评估", 
+            text: "请滑动评估此新闻的信任度（0=假新闻，100=绝对真实）：\n微博词条热搜第一：淀粉肠是骨泥做的，骨泥商家表示骨泥不建议人吃。", 
+            correctRange: [0, 30], // 小于等于30判定为正确
+            explanation: "记者先搜索“骨泥”，在电商平台发现售卖骨泥的大多是宠物食品商家，便向宠物食品商家询问“骨泥能不能给人吃”，商家自然回答“不建议人吃”。但采访最终被短视频配文为“骨泥商家：骨泥不建议人吃”。属于典型的“断章取义+情绪绑架”类虚假信息传播模式。",
+            dimension: "技术核查"
+        },
+        { 
+            qType: "binary", typeTag: "阶段三：二元真伪判定", 
+            text: "某推文写道：“特朗普：“已结束七八场战争”", 
+            correctValue: false, // 假
+            explanation: "特朗普声称自己结束了七场甚至八场战争，但列举的案例失实：埃及与埃塞俄比亚仅为外交摩擦，塞尔维亚与科索沃冲突早已结束，刚果战事仍在持续，泰国与柬埔寨冲突随后重燃。其说法夸大事实。",
+            dimension: "逻辑拆解"
+        },
+        { 
+            qType: "slider", typeTag: "阶段四：滑块信任度评估", 
+            text: "请滑动评估此信息的信任度（0=纯粹造谣，100=确凿事实）：\n近日，《成都：两只雄性四川大熊猫首次成功自然交配》一文爆火』", 
+            correctRange: [0, 20], // 属于未核实传言，保持中立怀疑态度为佳
+            explanation: "2026年1月，董某某、高某某为博流量，伪造“两只雄性大熊猫成功自然交配”的虚假新闻截图，扰乱公共秩序，被行政拘留并关停账号。同性大熊猫自然交配不符科学常识，网民应核实信息来源，避免被误导。",
+            dimension: "常识判断"
+        },
+        { 
+            qType: "binary", typeTag: "阶段五：二元真伪判定", 
+            text: "《人民日报》发布特朗普即将启程访华的信息，并在其他多家央视媒体找到相同推送。』", 
+            correctValue: true, // 真
+            explanation: "官方已发布消息，特朗普于2026年5月13日至15日对中国进行国事访问。《人民日报》提前发布其即将启程访华的相关信息，央视等主流权威媒体也同步推送报道，信息来源正规、内容属实，因此该表述无误。",
+            dimension: "信源交叉"
+        }
+    ];
+
+    /* ================= 全局状态 ================= */
+    let currentIndex = 0; let score = 0; let combo = 0; 
+    let timerInterval; let timeLeft = 20; let maxTime = 20;
+    
+    // 每题拥有一次复活机会
+    let currentAttempts = 0; 
+    let radarStats = { "直觉洞察": 20, "技术核查": 20, "逻辑拆解": 20, "常识判断": 20, "信源交叉": 20 };
+    let researchData = { "参与者ID": "Op_" + Math.random().toString(36).substr(2, 6), "开始时间": "", "结束时间": "", "总得分": 0, "详细数据": [] };
+
+    /* ================= 1. 开场动画 ================= */
+    const briefText = "终端接入中...\n操作员，网络空间遭到虚假信息侵袭。\n请自由选择：\n 做出对或错的判定\n或给出风险评估指数（0–100%） \n系统记录你的每一次决策，并给予建设性分析。无惩罚，无出局，只有持续成长。\n\n[防御系统就绪，等待潜入...]";
+    let typeIndex = 0;
+    
+    window.onload = () => {
+        const twElement = document.getElementById('typewriter');
+        function typeWriter() {
+            if (typeIndex < briefText.length) {
+                twElement.innerHTML += briefText.charAt(typeIndex) === '\n' ? '<br>' : briefText.charAt(typeIndex);
+                typeIndex++;
+                setTimeout(typeWriter, 40);
+            } else {
+                document.getElementById('btn-skip-briefing').style.display = 'block';
+                document.getElementById('cursor').style.display = 'none';
+            }
+        }
+        setTimeout(typeWriter, 500);
+    };
+
+    function showConsent() {
+        document.getElementById('briefing-screen').style.display = 'none';
+        document.getElementById('consent-screen').style.display = 'block';
+    }
+
+    function startGame() {
+        document.getElementById('consent-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'block';
+        researchData["开始时间"] = new Date().toLocaleString();
+        loadQuestion();
+    }
+
+    /* ================= 2. 核心逻辑与计时器 ================= */
+    function startTimer(duration) {
+        clearInterval(timerInterval);
+        maxTime = duration; timeLeft = duration;
+        const timerContainer = document.getElementById('timer-container');
+        const timerBar = document.getElementById('timer-bar');
+        timerContainer.style.display = 'block';
+        timerBar.style.width = '100%';
+        timerBar.style.background = 'linear-gradient(90deg, var(--true-color), var(--warn-color))';
+
+        timerInterval = setInterval(() => {
+            timeLeft -= 0.1;
+            let percent = (timeLeft / maxTime) * 100;
+            timerBar.style.width = percent + '%';
+            if(percent < 30) timerBar.style.background = 'var(--false-color)';
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                processAnswer(false, true); // 超时直接判定为彻底失败
+            }
+        }, 100);
+    }
+
+    function loadQuestion() {
+        currentAttempts = 0; // 重置本题尝试次数
+        const q = questions[currentIndex];
+        
+        document.getElementById('question-type').innerText = q.typeTag;
+        document.getElementById('question-text').innerText = q.text;
+        document.getElementById('current-progress').innerText = currentIndex + 1;
+        document.getElementById('question-container').style.display = 'block';
+        document.getElementById('feedback-area').style.display = 'none';
+        
+        const interactiveArea = document.getElementById('interactive-area');
+        interactiveArea.innerHTML = ''; 
+
+        if (q.qType === "binary") {
+            const grid = document.createElement('div');
+            grid.className = 'binary-grid';
+            
+            // 真 按钮
+            const btnTrue = document.createElement('button');
+            btnTrue.className = 'binary-btn true-btn'; btnTrue.innerHTML = '✅ 确有其事 / 真实';
+            btnTrue.onclick = function() { handleBinaryClick(this, true); };
+            
+            // 假 按钮
+            const btnFalse = document.createElement('button');
+            btnFalse.className = 'binary-btn false-btn'; btnFalse.innerHTML = '❌ 虚假造谣 / 骗局';
+            btnFalse.onclick = function() { handleBinaryClick(this, false); };
+            
+            grid.appendChild(btnTrue);
+            grid.appendChild(btnFalse);
+            interactiveArea.appendChild(grid);
+            
+        } else if (q.qType === "slider") {
+            interactiveArea.innerHTML = `
+                <div class="slider-container" id="slider-box">
+                    <input type="range" min="0" max="100" value="50" class="trust-slider" id="trust-slider">
+                    <div class="slider-value" id="slider-val-display">评估值: 50</div>
+                    <button class="btn-action" id="btn-submit-slider" style="margin-top: 25px; width: 200px;">锁定评估报告</button>
+                </div>
+            `;
+            const slider = document.getElementById('trust-slider');
+            const valDisplay = document.getElementById('slider-val-display');
+            slider.oninput = function() { valDisplay.innerText = `评估值: ${this.value}`; };
+            
+            document.getElementById('btn-submit-slider').onclick = () => {
+                let val = parseInt(slider.value);
+                let isCorrect = (val >= q.correctRange[0] && val <= q.correctRange[1]);
+                handleSliderSubmit(isCorrect);
+            };
+        }
+        
+        startTimer(20);
+    }
+
+    // 处理二元点击
+    function handleBinaryClick(btnElement, selectedValue) {
+        const q = questions[currentIndex];
+        const isCorrect = (selectedValue === q.correctValue);
+        
+        if (isCorrect) {
+            processAnswer(true);
+        } else {
+            if (currentAttempts === 0) {
+                // 第一次选错：震动、锁死该按钮、提示
+                currentAttempts++;
+                btnElement.classList.add('btn-shake');
+                btnElement.disabled = true; // 锁死错误选项
+                btnElement.style.borderColor = 'var(--false-color)';
+                showToast("⚠️", "警报：直觉出现偏差！你还有最后一次修正机会！");
+                setTimeout(() => btnElement.classList.remove('btn-shake'), 500);
+            } else {
+                // 第二次选错（理论上在二元题里锁死了一个就不会发生，但这保证逻辑完整）
+                processAnswer(false);
+            }
+        }
+    }
+
+    // 处理滑块提交
+    function handleSliderSubmit(isCorrect) {
+        if (isCorrect) {
+            processAnswer(true);
+        } else {
+            if (currentAttempts === 0) {
+                currentAttempts++;
+                const sliderBox = document.getElementById('slider-box');
+                sliderBox.classList.add('btn-shake');
+                showToast("⚠️", "警报：信任度评估偏离安全区间！请重新滑动！");
+                setTimeout(() => sliderBox.classList.remove('btn-shake'), 500);
+            } else {
+                processAnswer(false);
+            }
+        }
+    }
+
+    /* ================= 3. 结果判定与解析跳转 ================= */
+    function processAnswer(isFinalCorrect, isTimeout = false) {
+        clearInterval(timerInterval);
+        document.getElementById('question-container').style.display = 'none'; // 隐藏答题区
+        
+        const q = questions[currentIndex];
+        let roundScore = 0;
+        let feedbackClass = '';
+        let feedbackTitle = '';
+
+        if (isTimeout) {
+            combo = 0; roundScore = 0;
+            feedbackTitle = "⏳ 时间耗尽，防线被攻破！";
+            feedbackClass = "feedback-wrong";
+            radarStats[q.dimension] = Math.max(10, radarStats[q.dimension] - 15);
+        } else if (isFinalCorrect && currentAttempts === 0) {
+            // 一次通过
+            combo++;
+            roundScore = 10 + Math.floor(Math.max(0, timeLeft)); // 基础+时间奖励
+            feedbackTitle = "🎯 完美勘破！一次命中盲点";
+            feedbackClass = "feedback-correct";
+            radarStats[q.dimension] = Math.min(100, radarStats[q.dimension] + 20);
+        } else if (isFinalCorrect && currentAttempts === 1) {
+            // 第二次修正成功
+            combo = 0;
+            roundScore = 5; // 分数减半，无时间奖励
+            feedbackTitle = "💡 惊险修正！虽然偏差但也挽回了局面";
+            feedbackClass = "feedback-mixed";
+            radarStats[q.dimension] = Math.min(100, radarStats[q.dimension] + 5);
+        } else {
+            // 彻底失败（两次都错）
+            combo = 0; roundScore = 0;
+            feedbackTitle = "❌ 彻底沦陷！该信息已污染你的系统";
+            feedbackClass = "feedback-wrong";
+            radarStats[q.dimension] = Math.max(10, radarStats[q.dimension] - 15);
+        }
+
+        // 连击 UI
+        const comboUI = document.getElementById('combo-display');
+        if (combo >= 2) {
+            roundScore += combo * 5; // 连击加成
+            document.getElementById('combo-count').innerText = combo;
+            comboUI.style.display = 'inline-block';
+            comboUI.style.animation = 'none';
+            void comboUI.offsetWidth; 
+            comboUI.style.animation = 'pop 0.3s ease-out';
+            if(combo === 3) showToast("🔥", "所向披靡：信息破壁人！");
+        } else {
+            comboUI.style.display = 'none';
+        }
+
+        score += roundScore;
+        document.getElementById('current-score').innerText = score;
+
+        // 显示解析区
+        const fbArea = document.getElementById('feedback-area');
+        document.getElementById('feedback-title').innerHTML = feedbackTitle; 
+        document.getElementById('explanation-text').innerHTML = q.explanation;
+        
+        // 追加得分提示
+        const scoreNote = document.createElement('div');
+        scoreNote.innerHTML = `<br><span style="color:var(--primary-color); font-weight:bold;">✨ 本局获得战力分：+${roundScore}</span>`;
+        document.getElementById('explanation-text').appendChild(scoreNote);
+
+        fbArea.className = `feedback-box ${feedbackClass}`; 
+        fbArea.style.display = 'block';
+
+        // 数据记录
+        researchData["详细数据"].push(`第${currentIndex+1}题: 最终正确[${isFinalCorrect}], 尝试次数[${currentAttempts+1}], 耗时[${(20-timeLeft).toFixed(1)}s], 得分[${roundScore}]`);
+    }
+
+    function showToast(icon, text) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerHTML = `<span style="font-size:24px">${icon}</span> <span>${text}</span>`;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    function nextQuestion() {
+        currentIndex++;
+        if (currentIndex < questions.length) loadQuestion();
+        else showEndScreen();
+    }
+
+    /* ================= 4. 结算与可视化 ================= */
+    function showEndScreen() {
+        document.getElementById('game-screen').style.display = 'none';
+        document.getElementById('timer-container').style.display = 'none';
+        document.getElementById('end-screen').style.display = 'block';
+        
+        document.getElementById('final-score-display').innerText = score;
+        researchData["总得分"] = score;
+        researchData["结束时间"] = new Date().toLocaleString();
+        researchData["详细数据"] = researchData["详细数据"].join(" || "); 
+
+        let evalTxt = score >= 150 ? "🕵️‍♂️ <strong>S级！首席网络安全官</strong>" : (score >= 80 ? "🔍 <strong>A级！资深信息鉴定师</strong>" : "🔰 <strong>B级！见习防线巡查员</strong>");
+        document.getElementById('evaluation-text').innerHTML = evalTxt;
+
+        drawRadarChart();
+        sendDataToCloud();
+    }
+
+    function drawRadarChart() {
+        const ctx = document.getElementById('radarChart').getContext('2d');
+        const labels = Object.keys(radarStats);
+        const data = Object.values(radarStats);
+
+        new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '核查能力六维图',
+                    data: data,
+                    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                    borderColor: '#a855f7',
+                    pointBackgroundColor: '#00ff87',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#00ff87',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        pointLabels: { color: '#94a3b8', font: { size: 14, family: 'Segoe UI' } },
+                        ticks: { display: false, min: 0, max: 100 }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    function sendDataToCloud() {
+        const statusText = document.getElementById('upload-status');
+        const YOUR_ENDPOINT_URL = "https://formspree.io/f/meewapqg"; 
+
+        fetch(YOUR_ENDPOINT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(researchData)
+        })
+        .then(response => {
+            if(response.ok) {
+                statusText.innerText = "✅ 数据上传完毕。你已成功清剿虚假信息！";
+                statusText.style.color = "var(--true-color)";
+            } else throw new Error('Upload failed');
+        })
+        .catch(error => {
+            statusText.innerText = "⚠️ 无法连接到数据服务器，演练结束。";
+            statusText.style.color = "var(--warn-color)";
+        });
+    }
+</script>
+
+</body>
+</html>
